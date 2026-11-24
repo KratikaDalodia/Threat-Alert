@@ -3,16 +3,21 @@
 A small in-memory Go server. The security SDK reports threats, and company users view and resolve them.
 
 ## How to run
+
 ```
 go run .
 ```
+
 Listens on port 8080, or on `PORT` if set. Run tests with:
+
 ```
 go test -race ./...
 ```
+
 Docker: `docker build -t threatalert . && docker run -p 8080:8080 threatalert`
 
 ## Project structure
+
 - `main.go`: starts the HTTP server, reads `PORT`, shuts down cleanly on Ctrl+C.
 - `handlers.go`: routes, auth checks (401, then 403), input checks (400), JSON helpers.
 - `store.go`: all in-memory data, one mutex, repeat-alert logic, company separation.
@@ -21,15 +26,20 @@ Docker: `docker build -t threatalert . && docker run -p 8080:8080 threatalert`
 - `go.mod`: Go 1.22, no dependencies.
 
 ## What works and what does not
+
 Works: all 7 routes, the 22-step self-check from the paper, `go test -race` passes, graceful shutdown, Dockerfile.
 Not done: JSON persistence, `GET /summary`, `limit`/`offset` paging. Data is lost on restart. Emails are not checked for duplicates.
 
 ## How AI helped
-- Tools I used: TODO
-- Two prompts I used (paste them as you typed them): TODO
-- One thing the AI got wrong, and how I found and fixed it: TODO
-- One part I wrote or changed myself without AI: TODO
+
+- Tools I used: Claude
+- Two prompts I used (paste them as you typed them):
+  1. help me complete this project. all the required details are mentioned in the pdf. first let me know the scope of it and how long it will take, cause I only have 2 hours. just give a short brief of what we're going to do, and then we'll work on the implementation.
+  2. i was thinking if companies have to be separate like in the rule R6 , why dont we create a separate struct for it?
+- One thing the AI got wrong, and how I found and fixed it: Initially, the JSON body validation accepted additional garbage content after a valid JSON object, such as {"name":"Ram","email":"ram@acme.test","role":"viewer"} something else. I identified this issue and fixed it by adding a second JSON decoder to check for io.EOF, ensuring that no extra content follows the JSON object.
+- One part I wrote or changed myself without AI: Found that during testing the POST /users endpoint the response said invalid token even though the token was valid because the header only accepted "Bearer <token>" even though "bearer" is also correct, hence fixed that using strings.EqualFold on the first 7 characters.
 
 ## Questions
+
 1. Two identical alerts at the same moment: `ReportAlert` in `store.go` takes `s.mu.Lock()` (line 154) before it looks up the open alert (line 160) and holds it until the function returns. So "check if an open alert exists" and "create or update it" happen as one step. The second request waits, then finds the alert the first one created and just adds 1 to `count`. The new alert is stored in `openAlerts` (line 183) while the lock is still held.
 2. If we answered 403, the user would learn that an alert with that id exists in another company. With 404, "someone else's alert" and "no such alert" look the same. `GetAlert` and `Resolve` in `store.go` (lines 213 and 224) only look at alerts whose `orgID` matches the caller's, and otherwise return "not found".
